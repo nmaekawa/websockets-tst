@@ -1,0 +1,24 @@
+# call example, to launch 3 different urls:
+# - overrides the test_target, duration, and arrivalRate
+# - puts each client in the background
+# - to kill background jobs: kill %<job-number>
+#
+# for TARGET_INDEX in 1 2 3; do artillery run -o report-hxat-12-${TARGET_INDEX}.json --overrides "{\"config\": {\"phases\": [{\"duration\": 60, \"arrivalRate\": 5}], \"target\": \"wss://naomi.hxat.hxtech.org/ws/notification/course-v1-HarvardX-HxAT101-2015-T${TARGET_INDEX}--04fe31c0-5fb8-4e2b-b644-0d7307abf399--1/\"}}" connection-only.yml & done
+#
+#
+# to get graph report
+# artillery report -o report-hxat-12-1.html report-hxat-12-1.json
+#
+
+  config:
+    target: "{{ processEnvironment.TEST_TARGET }}"
+    phases:
+      - duration: "{{ processEnvironment.TEST_DURATION }}"
+        arrivalRate: "{{ processEnvironment.TEST_ARRIVALRATE }}"
+    ws:
+      rejectUnauthorized: false
+  scenarios:
+    - name: "lurker who just connects"
+      engine: "ws"
+      flow:
+        - think: 180
