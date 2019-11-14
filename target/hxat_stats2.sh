@@ -15,6 +15,7 @@
 # collect pids; do you need to sort?
 NGINX_PIDS=$(ps -ef | grep nginx | grep -v grep | awk '{print $2}')
 DAPHNE_PIDS=$(ps -ef | grep daphne | grep -v grep | awk '{print $2}')
+REDIS_PIDS=$(ps -ef | grep redis | grep -v grep | awk '{print $2}')
 
 # check mem, cpu, open files for nginx
 total_open=0
@@ -46,5 +47,19 @@ do
 done
 daphne_row="$total_open $total_mem $total_cpu"
 
+# check mem, cpu, open files for redis
+total_open=0
+total_mem=0.0
+total_cpu=0.0
+for pid in $REDIS_PIDS
+do
+    open_files=$(lsof -p $pid | wc -l )
+    total_open=$(echo "$total_open + $open_files" | bc) 
+    mem=$(ps -p $pid -o %mem=)
+    total_mem=$(echo "$total_mem + $mem" | bc)
+    cpu=$(ps -p $pid -o %cpu=)
+    total_cpu=$(echo "$total_cpu+$cpu" | bc)
+done
+redis_row="$total_open $total_mem $total_cpu"
 
-echo "$(date +'%H%M%S') $nginx_row $daphne_row"
+echo "$(date +'%H%M%S') $nginx_row $daphne_row $redis_row"
