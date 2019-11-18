@@ -1,10 +1,10 @@
 ---
 
   config:
-    target: "{{ processEnvironment.TEST_TARGET }}"
+    target: "{{ $processEnvironment.TEST_TARGET }}"
     phases:
-      - duration: "{{ processEnvironment.TEST_DURATION }}"
-        arrivalRate: "{{ processEnvironment.TEST_ARRIVALRATE }}"
+      - duration: "{{ $processEnvironment.TEST_DURATION }}"
+        arrivalRate: "{{ $processEnvironment.TEST_ARRIVALRATE }}"
     tls:
       rejectUnauthorized: false
   scenarios:
@@ -17,7 +17,7 @@
               Sec-Fetch-Mode: cors
               Referer: https://naomi.hxat.hxtech.org/lti_init/launch_lti/
               Content-Type: application/json
-              x-annotator-auth-token: "{{ processEnvironment.JWT_TOKEN }}"
+              x-annotator-auth-token: "{{ $processEnvironment.JWT_TOKEN }}"
               X-Requested-With: XMLHttpRequest
             json:
               '@context': 'http://catchpy.harvardx.harvard.edu.s3.amazonaws.com/jsonld/catch_context_jsonld.json'
@@ -25,14 +25,14 @@
                 items: [{format: text/html, language: en, purpose: commenting, type: TextualBody, value: ['naomi{{ $randomNumber(0,3000) }}']}]
                 type: List
               creator:
-                id: "{{ processEnvironment.USER_ID }}"
-                name: nmaekawa2017
-              id: '013ec74f-{{ $randomNumber(1111,9999) }}-cb37-3c61-b5cf9d6f7484'
+                id: "{{ $processEnvironment.USER_ID }}"
+                name: "{{ $processEnvironment.USER_NAME }}"
+              id: '013ec74f-ffff-cb37-3c61-b5cf9d6f7484'
               permissions:
-                can_admin: ["{{ processEnvironment.USER_ID }}"]
-                can_delete: ["{{ processEnvironment.USER_ID }}"]
+                can_admin: ["{{ $processEnvironment.USER_ID }}"]
+                can_delete: ["{{ $processEnvironment.USER_ID }}"]
                 can_read: []
-                can_update: ["{{ processEnvironment.USER_ID }}"]
+                can_update: ["{{ $processEnvironment.USER_ID }}"]
               platform:
                 collection_id: 04fe31c0-5fb8-4e2b-b644-0d7307abf399
                 context_id: 'course-v1:HarvardX+HxAT101+2015_T4'

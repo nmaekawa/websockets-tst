@@ -11,14 +11,14 @@
 #
 
   config:
-    target: "{{ processEnvironment.TEST_TARGET }}"
+    target: "{{ $processEnvironment.TEST_TARGET }}"
     phases:
-      - duration: "{{ processEnvironment.TEST_DURATION }}"
-        arrivalRate: "{{ processEnvironment.TEST_ARRIVALRATE }}"
+      - duration: "{{ $processEnvironment.TEST_DURATION }}"
+        arrivalRate: "{{ $processEnvironment.TEST_ARRIVALRATE }}"
     ws:
       rejectUnauthorized: false
   scenarios:
     - name: "lurker who just connects"
       engine: "ws"
       flow:
-        - think: 180
+        - think: "{{ $processEnvironment.TEST_SUSTAINED }}"
