@@ -21,4 +21,4 @@
     - name: "lurker who just connects"
       engine: "ws"
       flow:
-        - think: "{{ $processEnvironment.TEST_SUSTAINED }}"
+        - think: 180
