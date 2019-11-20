@@ -62,4 +62,6 @@ do
 done
 redis_row="$total_open $total_mem $total_cpu"
 
-echo "$(date +'%H%M%S') $nginx_row $daphne_row $redis_row"
+total_avg_cpu=$(top -bn1 | grep load | awk '{printf "%.2f\n", $(NF-2)}')
+
+echo "$(date +'%H%M%S') $nginx_row $daphne_row $redis_row | $total_avg_cpu"
