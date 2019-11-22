@@ -1,26 +1,48 @@
+#
+# automated run: use --no-web and --csv
+# $> locust -f examples/basic.py --csv=example --no-web -t10m -c 1 -r 1 --host <hxat url>
+#
 import os
 
-from copy import deepcopy
 import json
-from random import randint
 import logging
+from random import randint
+from subprocess import Popen
+from subprocess import PIPE
 from uuid import uuid4
 
 from locust import between
 from locust import HttpLocust
 from locust import TaskSet
 from locust import task
+import locust.stats
+
+# set custom interval for stats; default is 2s
+locust.stats.CSV_STATS_INTERVAL_SEC = 5
 
 TOKEN = ''
 USER_ID = ''
 USER_NAME = ''
 CONTEXT_ID = ''
 COLLECTION_ID = ''
+TARGET_SOURCE_ID = ''
 RESOURCE_LINK_ID = ''
 UTM_SOURCE = ''
 
+# this is particular to the target_source document
+# and used to randomize the region being annotate
+PTAG=2
+target_doc = [0, 589, 313, 434, 593, 493]
 
-def wa_template():
+
+def fetch_fortune():
+    process = Popen('fortune', shell=True, stdout=PIPE, stderr=None)
+    output, _ = process.communicate()
+    return output.decode('utf-8')
+
+def fresh_wa():
+    sel_start = randint(0, target_doc[PTAG])
+    sel_end = randint(sel_start, target_doc[PTAG])
     x = {
         "@context": "http://catchpy.harvardx.harvard.edu.s3.amazonaws.com/jsonld/catch_context_jsonld.json",
         "body": {
@@ -30,7 +52,7 @@ def wa_template():
                 "language": "en",
                 "purpose": "commenting",
                 "type": "TextualBody",
-                "value": [ "naominaominaomi" ]
+                "value": fetch_fortune()
             }],
         },
         "creator": {
@@ -48,20 +70,17 @@ def wa_template():
             "collection_id": COLLECTION_ID,
             "context_id": CONTEXT_ID,
             "platform_name": "edX",
-            "target_source_id": "1"
+            "target_source_id": TARGET_SOURCE_ID,
         },
         "schema_version": "1.1.0",
         "target": {
             "items": [{
                 "selector": {
                     "items": [
-                        { "endSelector": { "type": "XPathSelector", "value": "/div[1]/p[2]" },
-                            "refinedBy": { "end": 7, "start": 0, "type": "TextPositionSelector" },
-                            "startSelector": { "type": "XPathSelector", "value": "/div[1]/p[2]" },
+                        { "endSelector": { "type": "XPathSelector", "value": "/div[1]/p[{}]".format(PTAG) },
+                            "refinedBy": { "end": sel_end, "start": sel_start, "type": "TextPositionSelector" },
+                            "startSelector": { "type": "XPathSelector", "value": "/div[1]/p[{}]".format(PTAG) },
                             "type": "RangeSelector" },
-                        { "end": 732, "start": 725, "type": "TextPositionSelector" },
-                        { "exact": "Biltong", "prefix": "", "suffix": " turducken swine, shoulder alcatra ",
-                            "type": "TextQuoteSelector" }
                     ],
                     "type": "Choice"
                 },
@@ -71,28 +90,25 @@ def wa_template():
         },
         "type": "Annotation"
     }
-    return deepcopy(x)
+    return x
 
 class UserBehavior_CreateWebAnnotation(TaskSet):
-    def on_start(self):
-        self.catcha = wa_template()
+    #def on_start(self):
+    #    self.catcha = fresh_wa()
 
     @task(1)
     def add_annotation(self):
-        # set user
-        user = self.catcha['creator']['id']
-        # generate token for user
-        token = TOKEN
+        catcha = fresh_wa()
 
         # create annotation
         anno_id = str(uuid4())
         target_path = '/annotation_store/api/{}?resource_link_id={}&utm_source={}&version=catchpy'.format(
                 anno_id, RESOURCE_LINK_ID, UTM_SOURCE)
         response = self.client.post(
-            target_path, json=self.catcha, catch_response=True,
+            target_path, json=catcha, catch_response=True,
             headers={
                 'Content-Type': 'Application/json',
-                'x-annotator-auth-token': token,
+                'x-annotator-auth-token': TOKEN,
                 'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
             },
             verify=False,
@@ -118,7 +134,7 @@ class UserBehavior_CreateWebAnnotation(TaskSet):
 
 class WebsiteUser(HttpLocust):
     task_set = UserBehavior_CreateWebAnnotation
-    wait_time = between(2, 30)
+    wait_time = between(5, 20)
 
 
 
