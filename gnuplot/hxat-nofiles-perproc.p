@@ -1,5 +1,5 @@
 set terminal png size 2300,1000
-set output 'run1204-nofiles-perproc.png'
+set output '/dev/stdout'
 
 set style data linespoint
 set grid

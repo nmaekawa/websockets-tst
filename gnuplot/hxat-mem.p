@@ -1,8 +1,8 @@
 set terminal png size 2300,1000
-set output 'run1204-mem.png'
+set output '/dev/stdout'
 
 set style data linespoint
 set grid
 
-p '../run1204/run1-hxat-stats.log' u 1:11
+p '/dev/stdin' u 1:11
 

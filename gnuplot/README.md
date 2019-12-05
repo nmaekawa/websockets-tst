@@ -3,9 +3,8 @@
 # tested with gnuplot 5.2 patchlevel 2
 # $> apt-get install gnuplot
 #
-# have to learn how to write gnuplot scripts, so in the meantime:
-# - edit each script to point to proper input files
+# scripts expects to read from stdin and write to stdout
 #
 
-$> gnuplot hxat-mem.p
+$> cat hxat.dat | gnuplot hxat-mem.p >> hxat-mem.png
 
