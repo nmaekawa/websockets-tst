@@ -4,5 +4,13 @@ set output '/dev/stdout'
 set style data linespoint
 set grid
 
-p '/dev/stdin' u 1:11
+set xdata time
+set timefmt "%H%M%S"
+
+set title "hxat websockets load test"
+set ylabel "KB"
+set xlabel ARG2
+
+
+plot ARG1 using 1:11 title "total used mem"
 
