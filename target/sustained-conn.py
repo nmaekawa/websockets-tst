@@ -39,21 +39,20 @@ if __name__ == "__main__":
     for line in content.splitlines():
         items = line.split()
 
-
         repeated = items[7] if 'message repeated' in line else '1'
-        if 'WSCONNECTING' in line:
+        if 'WSCONNECT ' in line:
             value = int(repeated)
         elif 'WSDISCONNECT' in line:
             value = -1 * int(repeated)
         else:
-            i += 1
+            value = 0
 
-        if items[2] not in dat:
-            dat[items[2]] = value
+        key = items[2]
+        if key not in dat:
+            dat[key] = value
         else:
-            dat[items[2]] += value
+            dat[key] += value
 
-    print('IGNORED {} lines'.format(i))
     sorted_ts = sorted(dat)
     total = 0
     for x in sorted_ts:
