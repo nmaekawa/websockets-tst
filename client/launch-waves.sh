@@ -38,6 +38,15 @@ echo "wave_sleep($WAVE_SLEEP)"
 echo "total_duration($TOTAL_DURATION)"
 echo
 
+###############################################################
+#
+# remove next line when installing into client box!
+# -------------------------------------------------
+#
+# for test purposes, exit now when running on local box
+#
+exit
+
 echo
 echo "launch locust"
 nohup /home/nmaekawa/venvs/locust/bin/locust --host https://${TARGET_HOSTNAME} --csv=${TEST_NAME} --no-web -c 1 -r 1 --run-time $TOTAL_DURATION > ${TEST_NAME}-locust 2>&1 &
