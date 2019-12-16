@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>http vs ws - hxat performance</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
+    <style>
+    canvas {
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select: none;
+    }
+    </style>
+</head>
+
+<body>
+    <div style="width: 100%">
+        <canvas id="canvas"></canvas>
+    </div>
+    <script>
+        var barChartData = {
+            labels: {{ dat.x_labels }},
+            datasets: [{
+                label: 'http failure',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                data: {{ dat.http_failure }},
+            }, {
+                label: 'http success',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                data: {{ dat.http_success }},
+            }, {
+                label: 'ws failure',
+                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                data: {{ dat.ws_failure }},
+            }, {
+                label: 'ws success',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                data: {{ dat.ws_failure }},
+            }
+            ]
+
+        };
+        window.onload = function() {
+            var ctx = document.getElementById('canvas').getContext('2d');
+            window.myBar = new Chart(ctx, {
+                type: 'bar',
+                data: barChartData,
+                options: {
+                    title: {
+                        display: true,
+                        text: 'http vs ws requests'
+                    },
+                    tooltips: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    responsive: true,
+                    scales: {
+                        xAxes: [{
+                            stacked: true,
+                        }],
+                        yAxes: [{
+                            stacked: true
+                        }]
+                    }
+                }
+            });
+        };
+
+    </script>
+</body>
+
+</html>
