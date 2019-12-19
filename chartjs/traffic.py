@@ -16,13 +16,16 @@ month_by_name = ['na', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug',
         'Sep', 'Oct', 'Nov', 'Dec']
 
 
-def do_access_log(content, dataset):
+def do_access_log(content, dataset,freq='hourly'):
     for line in content.splitlines():
         items = line.split()
 
         # get datetime
         date = datetime.datetime.strptime(items[3][1:], '%d/%b/%Y:%H:%M:%S')
-        date2 = date.replace(minute=0, second=0)
+        if freq == 'daily':
+            date2 = date.replace(hour=0, minute=0, second=0)
+        else:
+            date2 = date.replace(minute=0, second=0)
         key = date2.isoformat()
 
         # datapoint
@@ -86,9 +89,15 @@ config = {
         '--chart', default='traffic', show_default=True,
         type=click.Choice(
             config.keys(),
-            case_sensitive=False),
+            case_sensitive=True),
         help='type of chart to be produced',)
-def cli(workdir, chart='traffic'):
+@click.option(
+        '--freq', default='hourly', show_default=True,
+        type=click.Choice(
+            ['hourly', 'daily'],
+            case_sensitive=True),
+        help='aggregate data daily, hourly, ...',)
+def cli(workdir, chart='traffic', freq='hourly'):
     templates_dir = os.path.join(THIS_DIR, 'templates')
     j2_env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(templates_dir),
@@ -102,7 +111,7 @@ def cli(workdir, chart='traffic'):
         # read file and get dataset
         with open(filename, 'r') as fd:
             content = fd.read()
-        one_set = config[chart]['data_masseuse'](content, dataset)
+        one_set = config[chart]['data_masseuse'](content, dataset, freq)
 
     sorted_ts = sorted(dataset)  # returns a sorted list of keys
     result = {
