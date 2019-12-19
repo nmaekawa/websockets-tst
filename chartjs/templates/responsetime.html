@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>nofiles - hxat performance</title>
+    <title>response time - hxat performance</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
     <style>
@@ -19,52 +19,43 @@
         <canvas id="canvas"></canvas>
     </div>
     <script>
-        var barChartData = {
+        var chartData = {
             labels: {{ dat.x_labels }},
             datasets: [{
-                label: 'nginx',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                data: {{ dat.nginx_nofiles }},
-            }, {
-                label: 'daphne',
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                data: {{ dat.daphne_nofiles }},
-            }, {
                 label: 'total',
-                backgroundColor: 'rgba(255, 206, 86, 0.2)',
-                data: {{ dat.total_nofiles }},
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                data: {{ dat.request_time }},
             /*}, {
-                label: 'total_mem_used',
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                data: {{ dat.total_mem_used }},
+                label: 'upstream',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                data: {{ dat.upstream_time }},
+            }, {
+                label: 'upstream self-reported',
+                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                data: {{ dat.selfreported_time }},
             */
             }
             ]
-
         };
         window.onload = function() {
             var ctx = document.getElementById('canvas').getContext('2d');
             window.myBar = new Chart(ctx, {
-                type: 'bar',
-                data: barChartData,
+                type: 'line',
+                data: chartData,
                 options: {
                     title: {
                         display: true,
-                        text: 'nofiles'
+                        text: 'response time'
                     },
                     tooltips: {
                         mode: 'index',
                         intersect: false
                     },
+                    hover: {
+                        mode: 'nearest',
+                        intersect: true
+                    },
                     responsive: true,
-                    scales: {
-                        xAxes: [{
-                            stacked: true,
-                        }],
-                        yAxes: [{
-                            stacked: true
-                        }]
-                    }
                 }
             });
         };
