@@ -20,18 +20,45 @@
         <canvas id="canvas"></canvas>
     </div>
     <script>
-        var barChartData = {
+        window.chartColors = {
+            red: 'rgb(255, 99, 132)',
+            orange: 'rgb(255, 159, 64)',
+            yellow: 'rgb(255, 205, 86)',
+            green: 'rgb(75, 192, 192)',
+            blue: 'rgb(54, 162, 235)',
+            purple: 'rgb(153, 102, 255)',
+            grey: 'rgb(201, 203, 207)',
+        };
+        var chartData = {
             labels: {{ dat.x_labels }},
             datasets: [{
-                barThickness: 'flex',
                 label: 'http failure',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                data: {{ dat.failure }},
-            }, {
+                type: 'bar',
                 barThickness: 'flex',
+                backgroundColor: window.chartColors.red,
+                data: {{ dat.failure }},
+                yAxisID: 'y-axis-1',
+            }, {
                 label: 'http success',
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                type: 'bar',
+                barThickness: 'flex',
+                backgroundColor: window.chartColors.blue,
                 data: {{ dat.success }},
+                yAxisID: 'y-axis-1',
+            }, {
+                label: 'max resp time',
+                type: 'line',
+                borderColor: window.chartColors.green,
+                backgroundColor: window.chartColors.green,
+                data: {{ dat.rtime_max }},
+                yAxisID: 'y-axis-2',
+            }, {
+                label: 'min resp time',
+                type: 'line',
+                borderColor: window.chartColors.orange,
+                backgroundColor: window.chartColors.orange,
+                data: {{ dat.rtime_min }},
+                yAxisID: 'y-axis-2',
             }
             ]
 
@@ -40,7 +67,7 @@
             var ctx = document.getElementById('canvas').getContext('2d');
             window.myBar = new Chart(ctx, {
                 type: 'bar',
-                data: barChartData,
+                data: chartData,
                 options: {
                     title: {
                         display: true,
@@ -62,7 +89,19 @@
                             stacked: true,
                         }],
                         yAxes: [{
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            id: 'y-axis-1',
                             stacked: true
+                        },{
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            id: 'y-axis-2',
+                            gridLines: {
+                                drawOnChartArea: false,
+                            }
                         }]
                     }
                 }
