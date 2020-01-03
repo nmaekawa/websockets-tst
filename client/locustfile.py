@@ -131,6 +131,37 @@ class UserBehavior_CreateWebAnnotation(TaskSet):
             else:
                 response.success()
 
+    @task(10)
+    def search(self):
+        target_path = '/annotation_store/api/?resource_link_id={}&utm_source={}&version=catchpy&limit=10&offset=0&media=text&source_id={}&context_id={}&collection_id={}'.format(
+                RESOURCE_LINK_ID, UTM_SOURCE,
+                TARGET_SOURCE_ID, CONTEXT_ID, COLLECTION_ID)
+        response = self.client.get(
+                target_path, catch_response=True,
+                headers={
+                    'Content-Type': 'Application/json',
+                    'x-annotator-auth-token': TOKEN,
+                    'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
+                },
+                verify=False,
+        )
+        if response.content == '':
+            response.failure('no data')
+        else:
+            try:
+                rows = response.json()['rows']
+            except KeyError:
+                resp = response.json()
+                if 'payload' in resp:
+                    response.failure(resp['payload'])
+                else:
+                    response.failure('missing rows in search response')
+                return
+            except json.decoder.JSONDecodeError as e:
+                response.failure(e)
+                return
+            else:
+                response.success()
 
 class WebsiteUser(HttpLocust):
     task_set = UserBehavior_CreateWebAnnotation
