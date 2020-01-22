@@ -68,16 +68,33 @@ def do_access_log(content):
 def do_cron_log(content):
     dat = {}
     for line in content.splitlines():
-        items = line.split()
+        if 'STaTS' in line:
+            if 'CRON' in line:
+                continue
+            else:
+                items = line.split()
+        else:
+            continue
 
         # get datetime
-        (h, m, s) = items[1].split(':')
+        (h, m, s) = items[2].split(':')
+        if int(h) <= 12:
+            continue
+        '''
+        elif int(m) <8:
+            continue
+        elif int(m) > 10:
+            continue
+            '''
+        #elif int(m) == 10 and int(s) > 3:
+        #    continue
         key = '{}:{}'.format(h, m)
+        #key = items[2]
         value = {
-                'nginx_nofiles': int(items[2]),
-                'daphne_nofiles': int(items[3]),
-                'total_nofiles': int(items[4]),
-                'total_mem_used': int(items[5]),
+                'nginx_nofiles': int(items[7]),
+                'daphne_nofiles': int(items[8]),
+                'total_nofiles': int(items[9]),
+                'total_mem_free': int(items[11]),
         }
 
         if key not in dat:
@@ -86,19 +103,19 @@ def do_cron_log(content):
             dat[key]['nginx_nofiles'] += int(value['nginx_nofiles'])
             dat[key]['daphne_nofiles'] += int(value['daphne_nofiles'])
             dat[key]['total_nofiles'] += int(value['total_nofiles'])
-            dat[key]['total_mem_used'] += int(value['total_mem_used'])
+            dat[key]['total_mem_free'] += int(value['total_mem_free'])
 
     sorted_ts = sorted(dat)  # returns a sorted list of keys
     dataset = {
             'x_labels': [], 'nginx_nofiles': [], 'daphne_nofiles': [],
-            'total_nofiles': [], 'total_mem_used': [],
+            'total_nofiles': [], 'total_mem_free': [],
     }
     for ts in sorted_ts:
         dataset['x_labels'].append(ts)
         dataset['nginx_nofiles'].append(dat[ts]['nginx_nofiles'])
         dataset['daphne_nofiles'].append(dat[ts]['daphne_nofiles'])
         dataset['total_nofiles'].append(dat[ts]['total_nofiles'])
-        dataset['total_mem_used'].append(dat[ts]['total_mem_used'])
+        dataset['total_mem_free'].append(dat[ts]['total_mem_free'])
 
     return dataset
 
@@ -135,6 +152,63 @@ def do_hxat_log(content):
         dataset['x_labels'].append(ts)
         dataset['ws_conn'].append(dat[ts])
         dataset['total'].append(total)
+
+    return dataset
+
+def do_hxat_log2(content):
+    dat = {}
+    for line in content.splitlines():
+        items = line.split()
+
+        # get datetime
+        (h, m, s) = items[2].split(':')
+        if int(h) <= 19:
+            continue
+        elif int(m) <8:
+            continue
+        elif int(m) > 10:
+            continue
+        elif int(m) == 10 and int(s) > 3:
+            continue
+        key = '{}:{}'.format(h, m)
+        #key = items[2]
+        value = {
+            'wsconnect': 0,
+            'wsconnecting': 0,
+            'wsdisconnect': 0,
+            'wstotal': 0,
+        }
+
+        repeated = items[7] if 'message repeated' in line else '1'
+        if 'WSCONNECT ' in line:
+            value['wsconnect'] = int(repeated)
+        elif 'WSCONNECTING' in line:
+            value['wsconnecting'] = int(repeated)
+        elif 'WSDISCONNECT' in line:
+            value['wsdisconnect'] = int(repeated)
+
+        if key not in dat:
+            dat[key] = value
+        else:
+            dat[key]['wsconnect'] += value['wsconnect']
+            dat[key]['wsconnecting'] += value['wsconnecting']
+            dat[key]['wsdisconnect'] += value['wsdisconnect']
+
+        # update the 'total' of ws connections up for this datapoint
+        dat[key]['wstotal'] = dat[key]['wsconnecting'] - dat[key]['wsconnect']
+
+    sorted_ts = sorted(dat)
+    dataset = {
+            'x_labels': [], 'wsconnect': [], 'wsconnecting': [],
+            'wsdisconnect': [], 'wstotal': [],
+    }
+    total = 0
+    for ts in sorted_ts:
+        dataset['x_labels'].append(ts)
+        dataset['wsconnect'].append(dat[ts]['wsconnect'])
+        dataset['wsconnecting'].append(dat[ts]['wsconnecting'])
+        dataset['wsdisconnect'].append(dat[ts]['wsdisconnect'])
+        dataset['wstotal'].append(dat[ts]['wstotal'])
 
     return dataset
 
@@ -187,9 +261,16 @@ config = {
     'nofiles': {
         'title': 'open files',
         'data_masseuse': do_cron_log,
-        'input_filename': 'cron.log',
+        'input_filename': 'syslog',
         'template_name': 'nofiles.html',
         'output_filename': 'plot-nofiles.html',
+    },
+    'memfree': {
+        'title': 'mem free',
+        'data_masseuse': do_cron_log,
+        'input_filename': 'syslog',
+        'template_name': 'memfree.html',
+        'output_filename': 'plot-memfree.html',
     },
     'wsconn': {
         'title': 'ws connections',
@@ -197,6 +278,13 @@ config = {
         'input_filename': 'syslog',
         'template_name': 'wsconn.html',
         'output_filename': 'plot-wsconn.html',
+    },
+    'wsconn2': {
+        'title': 'ws connections',
+        'data_masseuse': do_hxat_log2,
+        'input_filename': 'syslog',
+        'template_name': 'wsconn2.html',
+        'output_filename': 'plot-wsconn2.html',
     },
     'responsetime': {
         'title': 'response time',

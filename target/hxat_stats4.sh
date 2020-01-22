@@ -1,9 +1,9 @@
 #!/bin/bash
 # crontab suggestion, for data point every 15sec
-# * * * * * /home/nmaekawa/bin/hxat_stats2.sh >> /home/nmaekawa/hxat_stats2.log
-# * * * * * (sleep 15; /home/nmaekawa/bin/hxat_stats2.sh >> /home/nmaekawa/hxat_stats2.log)
-# * * * * * (sleep 30; /home/nmaekawa/bin/hxat_stats2.sh >> /home/nmaekawa/hxat_stats2.log)
-# * * * * * (sleep 45; /home/nmaekawa/bin/hxat_stats2.sh >> /home/nmaekawa/hxat_stats2.log)
+# * * * * * /home/nmaekawa/bin/hxat_stats2.sh 2>&1 | logger -t STATS
+# * * * * * (sleep 15; /home/nmaekawa/bin/hxat_stats2.sh 2>&1 | logger -t STATS)
+# * * * * * (sleep 30; /home/nmaekawa/bin/hxat_stats2.sh 2>&1 | logger -t STATS)
+# * * * * * (sleep 45; /home/nmaekawa/bin/hxat_stats2.sh 2>&1 | logger -t STATS)
 
 #
 # printing totals of open files, mem, cpu for nginx and daphne processes

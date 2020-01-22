@@ -22,22 +22,24 @@
         var barChartData = {
             labels: {{ dat.x_labels }},
             datasets: [{
-                label: 'nginx',
-                backgroundColor: 'rgba(255, 99, 132, 1)',
-                data: {{ dat.nginx_nofiles }},
-            }, {
-                label: 'daphne',
-                backgroundColor: 'rgba(54, 162, 235, 1)',
-                data: {{ dat.daphne_nofiles }},
-            }, {
-                label: 'total',
+                label: 'conn',
+                /*backgroundColor: 'rgba(255, 99, 132, 1)', ** red ** */
                 backgroundColor: 'rgba(255, 206, 86, 1)',
-                data: {{ dat.total_nofiles }},
+                data: {{ dat.wsconnect }},
+            }, {
+                label: 'connecting',
+                backgroundColor: 'rgba(54, 162, 235, 1)',
+                data: {{ dat.wsconnecting }},
             /*}, {
-                label: 'total_mem_used',
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                data: {{ dat.total_mem_used }},
+                label: 'disconn',
+                backgroundColor: 'rgba(255, 206, 86, 1)',
+                data: {{ dat.wsdisconnect }},
             */
+            }, {
+                label: 'total_conn',
+                /* backgroundColor: 'rgba(75, 192, 192, 1)', ** green ** */
+                backgroundColor: 'rgba(255, 99, 132, 1)',
+                data: {{ dat.wstotal }},
             }
             ]
 
@@ -50,7 +52,7 @@
                 options: {
                     title: {
                         display: true,
-                        text: 'nofiles'
+                        text: 'wsconn'
                     },
                     tooltips: {
                         mode: 'index',
@@ -59,10 +61,10 @@
                     responsive: true,
                     scales: {
                         xAxes: [{
-                            stacked: true,
+                            stacked: false,
                         }],
                         yAxes: [{
-                            stacked: true
+                            stacked: false
                         }]
                     }
                 }
