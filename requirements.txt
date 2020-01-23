@@ -1,0 +1,11 @@
+# python dependencies
+
+click==7.0
+python-dateutil==2.8.1
+gevent==1.5a2
+jinja2==2.10.3
+pyjwt==1.7.1
+locustio==0.13.5
+lti==0.9.4
+websocket-client==0.57.0
+

@@ -1,9 +1,11 @@
 #
-# original from
+# ws heavily based on
+# https://github.com/websocket-client/websocket-client/blob/master/bin/wsdump.py
 #
 import code
 import gevent
 import json
+import jwt
 import os
 import re
 import ssl
@@ -11,25 +13,36 @@ import sys
 import threading
 import time
 
+from datetime import datetime
+from dateutil import tz
 from random import randint
 from subprocess import Popen
 from subprocess import PIPE
 from uuid import uuid4
 
-from locust import HttpLocust, TaskSet, task, ResponseError, events, Locust
+from locust import between
+from locust import constant
+from locust import events
+from locust import HttpLocust
+from locust import Locust
+from locust import seq_task
+from locust import task
+from locust import TaskSequence
+from locust import TaskSet
+from locust import ResponseError
+from lti import ToolConsumer
+
 import websocket
 
 
-#info for naomi.hxat.hxtech.org
-#---------------------------------------
-TOKEN = ''
-USER_ID = ''
-USER_NAME = ''
-CONTEXT_ID = ''
-COLLECTION_ID = ''
-TARGET_SOURCE_ID = ''
-RESOURCE_LINK_ID = ''
-UTM_SOURCE = ''
+#info from environment
+#---------------------
+USER_ID = os.environ.get('USER_ID', 'fake_user_id')
+USER_NAME = os.environ.get('USER_NAME', 'fake_user_name')
+CONTEXT_ID = os.environ.get('CONTEXT_ID', 'fake_context_id')
+COLLECTION_ID = os.environ.get('COLLECTION_ID', 'fake_collection_id')
+TARGET_SOURCE_ID = os.environ.get('TARGET_SOURCE_ID', '0')
+RESOURCE_LINK_ID = os.environ.get('RESOURCE_LINK_ID', 'fake_resource_link_id')
 
 # this is particular to the target_source document
 # and used to randomize the region being annotate
@@ -49,6 +62,10 @@ class Console(code.InteractiveConsole):
 
 
 class SocketClient(object):
+    '''hxat websockets client
+
+    connects and reads from ws; does not send anything; ever.
+    '''
     def __init__(self, host, app_url_path='', timeout=2):
         self.console = Console()
         self.host = host
@@ -56,29 +73,43 @@ class SocketClient(object):
         self.protocol = 'wss'
         path = os.path.join('/', app_url_path)
         self.url = '{}://{}{}/'.format(self.protocol, host, path)
+        self.ws = None
         self.ws_timeout = timeout
+        self.thread = None
 
         events.quitting += self.on_close
-        self.console.write('*********************** connecting to {}'.format(self.url))
-        self.connect()
 
 
     def connect(self):
-        self.ws = websocket.create_connection(
-                url=self.url,
-                sslopt={
-                    'cert_reqs': ssl.CERT_NONE,  # do not check certs
-                    'check_hostname': False,     # do not check hostname
-                    }
-                )
+        if self.ws is None:
+            self.ws = websocket.create_connection(
+                    url=self.url,
+                    sslopt={
+                        'cert_reqs': ssl.CERT_NONE,  # do not check certs
+                        'check_hostname': False,     # do not check hostname
+                        }
+                    )
+            # if server closes the connection, the thread dies, but
+            # if thread dies, it closes the connection?
+            self.thread = threading.Thread(
+                    target=self.recv,
+                    daemon=True
+                    )
+            self.thread.start()
+        else:
+            self.console.write('{}| nothing to do: already connected'.format(
+                self.session_id))
 
-        self.thread = threading.Thread(target=self.recv_ws)
-        self.thread.daemon = True
-        self.thread.start()
 
+    def close(self):
+        if self.ws is not None:
+            self.ws.close()
+        else:
+            self.console.write(
+                    '{}| nothing to do: NOT connected'.format(self.session_id))
 
     def on_close(self):
-        self.ws.close()
+        self.close()
 
 
     def _recv(self):
@@ -102,12 +133,9 @@ class SocketClient(object):
         return frame.opcode, frame.data
 
 
-    def recv_ws(self):
+    def recv(self):
         while True:
-            self.console.write('*********************** recv loop')
-            #start_time = time.time()
             opcode, data = self._recv()
-            #elapsed = int((time.time() - start_time) * 1000)
 
             if opcode == websocket.ABNF.OPCODE_TEXT and isinstance(
                     data, bytes):
@@ -138,13 +166,14 @@ class SocketClient(object):
                     )
 
             elif opcode == websocket.ABNF.OPCODE_CLOSE:
-                # try to connect again?
-                self.console.write('####################### recv CLOSE')
-                break
+                self.console.write(
+                        '{}| ####################### recv CLOSE'.format(self.session_id))
+                break  # terminate loop
 
             elif opcode == websocket.ABNF.OPCODE_PING:
                 # ignore ping-pong
-                self.console.write('*********************** ping')
+                self.console.write(
+                        '{}| *********************** ping'.format(self.session_id))
                 pass
 
             else:
@@ -153,23 +182,41 @@ class SocketClient(object):
                     request_type='ws-recv', name='receive',
                     response_time=None,
                     exception=websocket.WebSocketException(
-                        'Unknown error for opcode({})'.format(opcode)),
+                        '{}| Unknown error for opcode({})'.format(self.session_id, opcode)),
                     )
 
-            self.console.write('*********************** recv ({}) ({})'.format(opcode, data))
+            self.console.write(
+                    '{}| *********************** recv ({}) ({})'.format(self.session_id, opcode, data))
 
 
     def calc_response_length(self, response):
         length = 0
         json_data = json.dumps(response)
         return len(json_data)
-        '''
-        for r in response:
-            json_data = json.dumps(r)
-            length += len(json_data)
-        return length
-        '''
 
+
+######################################################
+# http hxat operations:
+#   lti login
+#   get static pages (hxighlighter javascripts and css)
+#   search annotations
+#   create annotation
+######################################################
+
+def make_jwt(
+    apikey, secret, user,
+    iat=None, ttl=36000, override=[],
+    backcompat=False):
+    payload = {
+        'consumerKey': apikey if apikey else str(uuid4()),
+        'userId': user if user else str(uuid4()),
+        'issuedAt': iat if iat else datetime.now(tz.tzutc()).isoformat(),
+        'ttl': ttl,
+    }
+    if not backcompat:
+        payload['override'] = override
+
+    return jwt.encode(payload, secret)
 
 
 def fetch_fortune():
@@ -229,58 +276,198 @@ def fresh_wa():
     }
     return x
 
-class WSBehavior(TaskSet):
+def hxat_create(locust):
+    catcha = fresh_wa()
 
-    @task(10)
-    def add_annotation(self):
-        catcha = fresh_wa()
+    # create annotation
+    anno_id = str(uuid4())
+    params = {
+            'resource_link_id': RESOURCE_LINK_ID,
+            'utm_source': locust.cookies['UTM_SOURCE'],
+            'version': 'catchpy',
+            }
+    target_path = '/annotation_store/api/{}?'.format(anno_id)
+    response = locust.client.post(
+        target_path, json=catcha, catch_response=True,
+        name='/annotation_store/api/create',
+        headers={
+            'Content-Type': 'Application/json',
+            'x-annotator-auth-token': locust.store_token,
+            'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
+        },
+        params=params,
+        verify=False,
+    )
+    if response.content == '':
+        response.failure('no data')
+    else:
+        try:
+            a_id = response.json()['id']
+        except KeyError:
+            resp = response.json()
+            if 'payload' in resp:
+                response.failure(resp['payload'])
+            else:
+                response.failure('no id in response')
+            return
+        except json.decoder.JSONDecodeError as e:
+            response.failure(e)
+            return
+        else:
+            response.success()
 
-        # create annotation
-        anno_id = str(uuid4())
-        params = {
-                'resource_link_id': RESOURCE_LINK_ID,
-                'utm_source': UTM_SOURCE,
-                'version': 'catchpy',
-                }
-        target_path = '/annotation_store/api/{}?'.format(anno_id)
-        response = self.client.post(
-            target_path, json=catcha, catch_response=True,
-            name='/annotation_store/api/create',
+
+def hxat_search(locust, limit=50, offset=0):
+    params = {
+            'resource_link_id': RESOURCE_LINK_ID,
+            'utm_source': locust.cookies['UTM_SOURCE'],
+            'version': 'catchpy',
+            'limit': limit,
+            'offset': offset,
+            'media': 'text',
+            'source_id': TARGET_SOURCE_ID,
+            'context_id': CONTEXT_ID,
+            'collection_id': COLLECTION_ID,
+            }
+    target_path = '/annotation_store/api/'
+    response = locust.client.get(
+            target_path, catch_response=True,
+            name='/annotation_store/api/search',
             headers={
                 'Content-Type': 'Application/json',
-                'x-annotator-auth-token': TOKEN,
+                'x-annotator-auth-token': locust.store_token,
                 'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
             },
             params=params,
             verify=False,
-        )
-        if response.content == '':
-            response.failure('no data')
-        else:
-            try:
-                a_id = response.json()['id']
-            except KeyError:
-                resp = response.json()
-                if 'payload' in resp:
-                    response.failure(resp['payload'])
-                else:
-                    response.failure('no id in response')
-                return
-            except json.decoder.JSONDecodeError as e:
-                response.failure(e)
-                return
+    )
+    if response.content == '':
+        response.failure('no data')
+    else:
+        try:
+            rows = response.json()['rows']
+        except KeyError:
+            resp = response.json()
+            if 'payload' in resp:
+                response.failure(resp['payload'])
             else:
-                response.success()
+                response.failure('missing rows in search response')
+            return
+        except json.decoder.JSONDecodeError as e:
+            response.failure(e)
+            return
+        else:
+            response.success()
+
+def hxat_get_static(locust, url_path):
+    target_path = os.path.join('/static/', url_path)
+    response = locust.client.get(
+            target_path, catch_response=True,
+            cookies=locust.cookies,
+            name='/static',
+            headers={
+                'Accept': 'text/css,*/*;q=0.1',
+                'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
+            },
+            verify=False,
+    )
+    if response.content == '':
+        response.failure('no data')
+    else:
+        response.success()
+
+
+def hxat_lti_launch(locust):
+
+    target_path = '/lti_init/launch_lti/'
+    consumer = ToolConsumer(
+            consumer_key=os.environ.get('HXAT_CONSUMER', 'fake_consumer_key'),
+            consumer_secret=os.environ.get('HXAT_SECRET', 'fake_secret_key'),
+            launch_url='{}{}'.format(locust.host, target_path),
+            params={
+                "lti_message_type": "basic-lti-launch-request",
+                "lti_version": "LTI-1p0",
+                "resource_link_id": RESOURCE_LINK_ID,
+                "lis_person_sourcedid": os.environ.get('LIS_PERSON_SOURCEDID','fake_person'),
+                "lis_outcome_service_url": os.environ.get('LIS_OUTCOME_SERVICE_URL', 'fake_url'),
+                "user_id": USER_ID,
+                "roles": os.environ.get('USER_ROLES', 'fake_role'),
+                "context_id": CONTEXT_ID,
+                },
+            )
+    headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            }
+    params = consumer.generate_launch_data()
+    response = locust.client.post(
+            target_path, catch_response=True,
+            name='/lti_launch/', headers=headers, data=params,
+            verify=False,
+            )
+    if response.content == '':
+        response.failure('no data')
+    else:
+        cookie_csrf = response.cookies.get('csrftoken', None)
+        cookie_sid = response.cookies.get('sessionid', None)
+        if not cookie_csrf or not cookie_sid:
+            response.failure('missing csrf and/or session-id cookies')
+        else:
+            locust.cookies['UTM_SOURCE'] = cookie_sid
+            locust.cookies['CSRF_TOKEN'] = cookie_csrf
+            response.success()
+
+
+class WSBehavior(TaskSet):
+    wait_time = between(60, 300)
+    def on_start(self):
+        # basic lti login for hxat text annotation
+        hxat_lti_launch(self.locust)
+        hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
+        hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
+        hxat_search(self.locust)
+        self.locust.ws_client.connect()
+
+    def on_stop(self):
+        if self.locust.ws_client is not None:
+            self.locust.ws_client.console.write('========================================================= closing ws')
+            self.locust.ws_client.close()
+
+
+    @task(1)
+    def lurker1(self):
+        hxat_search(
+                locust=self.locust,
+                limit=randint(10, 50),
+                offset=randint(50, 200),
+                )
+
+    @task(10)
+    def lurker2(self):
+        hxat_search(
+                locust=self.locust,
+                )
+
+    @task(1)
+    def homework1(self):
+        hxat_create(self.locust)
+        hxat_search(self.locust)
+
+
 
 
 class WSUser(HttpLocust):
     task_set = WSBehavior
-    min_wait = 60
-    max_wait = 600
 
     def __init__(self, *args, **kwargs):
         super(WSUser, self).__init__(*args, **kwargs)
 
+        self.console = Console()
+        self.cookies = dict()  # csrf, session after lti-login
+        self.store_token = make_jwt(
+                apikey=os.environ.get('STORE_CONSUMER', 'fake_consumer'),
+                secret=os.environ.get('STORE_SECRET', 'fake_secret'),
+                user=USER_ID
+                )
         (proto, hostname) = self.host.split('//')
         url_path = '/ws/notification/{}--{}--{}'.format(
                 re.sub('[\W_]', '-', CONTEXT_ID),
