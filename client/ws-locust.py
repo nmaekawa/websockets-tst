@@ -14,6 +14,7 @@ import threading
 import time
 
 from datetime import datetime
+from datetime import timedelta
 from dateutil import tz
 from random import randint
 from subprocess import Popen
@@ -140,6 +141,12 @@ class SocketClient(object):
         return frame.opcode, frame.data
 
 
+    def webann_create_date(self, json_webann):
+        weba = json.loads(json_webann)
+        created = datetime.fromisoformat(weba['message']['created'])
+        return created
+
+
     def recv(self):
         while True:
             opcode, data = self._recv()
@@ -147,11 +154,14 @@ class SocketClient(object):
             if opcode == websocket.ABNF.OPCODE_TEXT and isinstance(
                     data, bytes):
                 data = str(data, 'utf-8')
+                created = self.webann_create_date(data)
+                ts_delta = (datetime.now(tz.tzutc()) - \
+                        created) / (timedelta(microseconds=1) * 1000)
                 # success
                 response_length = self.calc_response_length(data)
                 events.request_success.fire(
                     request_type='ws-recv', name='receive',
-                    response_time=None,
+                    response_time=ts_delta,
                     response_length=response_length)
 
             elif opcode == websocket.ABNF.OPCODE_BINARY:
@@ -409,7 +419,7 @@ def hxat_lti_launch(locust):
             'Content-Type': 'application/x-www-form-urlencoded',
             }
     params = consumer.generate_launch_data()
-    locust.console.write('LTI LTI LTI LTI LTI: {}'.format(params))
+    locust.log('LTILTILTILTILTILTILTILTILTI PARAMS: {}'.format(params))
     response = locust.client.post(
             target_path, catch_response=True,
             name='/lti_launch/', headers=headers, data=params,
@@ -418,7 +428,6 @@ def hxat_lti_launch(locust):
     if response.content == '':
         response.failure('no data')
     else:
-        locust.console.write('-------------------------------------------- response cookies ({})'.format(response.cookies))
         cookie_csrf = response.cookies.get('csrftoken', None)
         cookie_sid = response.cookies.get('sessionid', None)
         if not cookie_csrf or not cookie_sid:
@@ -480,6 +489,7 @@ class WSUser(HttpLocust):
         super(WSUser, self).__init__(*args, **kwargs)
 
         self.console = Console()
+        self.verbose = VERBOSE
         self.cookies = dict()  # csrf, session after lti-login
         self.store_token = make_jwt(
                 apikey=os.environ.get('STORE_CONSUMER', 'fake_consumer'),
@@ -501,5 +511,7 @@ class WSUser(HttpLocust):
         else:
             self.verify = True
 
-
+    def log(self, msg):
+        if self.verbose:
+            self.console.write(msg)
 
