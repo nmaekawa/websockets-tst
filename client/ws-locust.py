@@ -4,6 +4,7 @@
 #
 import code
 import gevent
+import iso8601
 import json
 import jwt
 import os
@@ -143,7 +144,8 @@ class SocketClient(object):
 
     def webann_create_date(self, json_webann):
         weba = json.loads(json_webann)
-        created = datetime.fromisoformat(weba['message']['created'])
+        #created = datetime.fromisoformat(weba['message']['created'])
+        created = iso8601.parse_date(weba['message']['created'])
         return created
 
 
@@ -449,7 +451,21 @@ class WSBehavior(TaskSet):
             hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
             hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
             hxat_search(self.locust)
-            self.locust.ws_client.connect()
+            try:
+                self.locust.ws_client.connect()
+            except Exception as e:
+                raise
+            else:
+                if self.locust.ws_client is not None:
+                    if self.locust.ws_client.ws is not None:
+                        if self.locust.ws_client.ws.connected:
+                            pass
+                        else:
+                            raise Exception('unable to connect ws')
+                    else:
+                        raise Exception('unable to get ws object')
+                else:
+                    raise Exception('ws_client is None!'
         else:
             raise Exception('failed to lti login')
 
