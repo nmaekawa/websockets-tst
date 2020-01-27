@@ -44,6 +44,8 @@ COLLECTION_ID = os.environ.get('COLLECTION_ID', 'fake_collection_id')
 TARGET_SOURCE_ID = os.environ.get('TARGET_SOURCE_ID', '0')
 RESOURCE_LINK_ID = os.environ.get('RESOURCE_LINK_ID', 'fake_resource_link_id')
 
+VERBOSE = os.environ.get('WS_TEST_VERBOSE', 'true').lower() == 'true'
+
 # this is particular to the target_source document
 # and used to randomize the region being annotate
 PTAG=2
@@ -68,6 +70,7 @@ class SocketClient(object):
     '''
     def __init__(self, host, app_url_path='', timeout=2):
         self.console = Console()
+        self.verbose = VERBOSE
         self.host = host
         self.session_id = uuid4().hex
         self.protocol = 'wss'
@@ -78,6 +81,10 @@ class SocketClient(object):
         self.thread = None
 
         events.quitting += self.on_close
+
+    def log(self, msg):
+        if self.verbose:
+            self.console.write(msg)
 
 
     def connect(self):
@@ -97,7 +104,7 @@ class SocketClient(object):
                     )
             self.thread.start()
         else:
-            self.console.write('{}| nothing to do: already connected'.format(
+            self.log('{}| nothing to do: already connected'.format(
                 self.session_id))
 
 
@@ -105,8 +112,8 @@ class SocketClient(object):
         if self.ws is not None:
             self.ws.close()
         else:
-            self.console.write(
-                    '{}| nothing to do: NOT connected'.format(self.session_id))
+            self.log('{}| nothing to do: NOT connected'.format(
+                self.session_id))
 
     def on_close(self):
         self.close()
@@ -166,14 +173,16 @@ class SocketClient(object):
                     )
 
             elif opcode == websocket.ABNF.OPCODE_CLOSE:
-                self.console.write(
-                        '{}| ####################### recv CLOSE'.format(self.session_id))
+                self.log(
+                        '{}| ####################### recv CLOSE'.format(
+                            self.session_id))
                 break  # terminate loop
 
             elif opcode == websocket.ABNF.OPCODE_PING:
                 # ignore ping-pong
-                self.console.write(
-                        '{}| *********************** ping'.format(self.session_id))
+                self.log(
+                        '{}| *********************** ping'.format(
+                            self.session_id))
                 pass
 
             else:
@@ -182,11 +191,12 @@ class SocketClient(object):
                     request_type='ws-recv', name='receive',
                     response_time=None,
                     exception=websocket.WebSocketException(
-                        '{}| Unknown error for opcode({})'.format(self.session_id, opcode)),
+                        '{}| Unknown error for opcode({})'.format(
+                            self.session_id, opcode)),
                     )
 
-            self.console.write(
-                    '{}| *********************** recv ({}) ({})'.format(self.session_id, opcode, data))
+            self.log('{}| *********************** recv ({}) ({})'.format(
+                self.session_id, opcode, data))
 
 
     def calc_response_length(self, response):
@@ -296,7 +306,7 @@ def hxat_create(locust):
             'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
         },
         params=params,
-        verify=False,
+        verify=locust.verify,
     )
     if response.content == '':
         response.failure('no data')
@@ -339,7 +349,7 @@ def hxat_search(locust, limit=50, offset=0):
                 'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
             },
             params=params,
-            verify=False,
+            verify=locust.verify,
     )
     if response.content == '':
         response.failure('no data')
@@ -369,7 +379,7 @@ def hxat_get_static(locust, url_path):
                 'Accept': 'text/css,*/*;q=0.1',
                 'Referer': 'https://naomi.hxat.hxtech.org/lti_init/launch_lti/',
             },
-            verify=False,
+            verify=locust.verify,
     )
     if response.content == '':
         response.failure('no data')
@@ -399,37 +409,45 @@ def hxat_lti_launch(locust):
             'Content-Type': 'application/x-www-form-urlencoded',
             }
     params = consumer.generate_launch_data()
+    locust.console.write('LTI LTI LTI LTI LTI: {}'.format(params))
     response = locust.client.post(
             target_path, catch_response=True,
             name='/lti_launch/', headers=headers, data=params,
-            verify=False,
+            verify=locust.verify,
             )
     if response.content == '':
         response.failure('no data')
     else:
+        locust.console.write('-------------------------------------------- response cookies ({})'.format(response.cookies))
         cookie_csrf = response.cookies.get('csrftoken', None)
         cookie_sid = response.cookies.get('sessionid', None)
         if not cookie_csrf or not cookie_sid:
             response.failure('missing csrf and/or session-id cookies')
+            return False
         else:
             locust.cookies['UTM_SOURCE'] = cookie_sid
             locust.cookies['CSRF_TOKEN'] = cookie_csrf
             response.success()
+            return True
 
 
 class WSBehavior(TaskSet):
     wait_time = between(60, 300)
     def on_start(self):
         # basic lti login for hxat text annotation
-        hxat_lti_launch(self.locust)
-        hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
-        hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
-        hxat_search(self.locust)
-        self.locust.ws_client.connect()
+        ret = hxat_lti_launch(self.locust)
+        if ret:
+            hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
+            hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
+            hxat_search(self.locust)
+            self.locust.ws_client.connect()
+        else:
+            raise Exception('failed to lti login')
 
     def on_stop(self):
         if self.locust.ws_client is not None:
-            self.locust.ws_client.console.write('========================================================= closing ws')
+            self.locust.ws_client.log(
+                    '========================================================= closing ws')
             self.locust.ws_client.close()
 
 
@@ -468,6 +486,7 @@ class WSUser(HttpLocust):
                 secret=os.environ.get('STORE_SECRET', 'fake_secret'),
                 user=USER_ID
                 )
+        # remove protocol from url so we can do wss requests
         (proto, hostname) = self.host.split('//')
         url_path = '/ws/notification/{}--{}--{}'.format(
                 re.sub('[\W_]', '-', CONTEXT_ID),
@@ -476,6 +495,11 @@ class WSUser(HttpLocust):
                 )
         self.ws_client = SocketClient(hostname, app_url_path=url_path)
 
+        # check if self-signed certs
+        if 'hxtech.org' in hostname:
+            self.verify = os.environ.get('REQUESTS_CA_BUNDLE', False)
+        else:
+            self.verify = True
 
 
 
