@@ -55,7 +55,7 @@ target_doc = [0, 589, 313, 434, 593, 493]
 
 # valid codes for ws read
 OPCODE_DATA = (websocket.ABNF.OPCODE_TEXT, websocket.ABNF.OPCODE_BINARY)
-websocket.enableTrace(True)
+#websocket.enableTrace(True)
 
 class Console(code.InteractiveConsole):
     def write(self, data):
@@ -86,36 +86,49 @@ class SocketClient(object):
 
     def log(self, msg):
         if self.verbose:
-            self.console.write(msg)
+            self.console.write('[{}] {}'.format(self.session_id, msg))
 
 
     def connect(self):
         if self.ws is None:
-            self.ws = websocket.create_connection(
-                    url=self.url,
-                    sslopt={
-                        'cert_reqs': ssl.CERT_NONE,  # do not check certs
-                        'check_hostname': False,     # do not check hostname
-                        }
+            try:
+                self.ws = websocket.create_connection(
+                        url=self.url,
+                        sslopt={
+                            'cert_reqs': ssl.CERT_NONE,  # do not check certs
+                            'check_hostname': False,     # do not check hostname
+                            }
+                        )
+            except Exception as e:
+                events.request_failure.fire(
+                    request_type='ws-conn', name='connection',
+                    response_time=None,
+                    response_length=0,
+                    exception=e,
                     )
-            # if server closes the connection, the thread dies, but
-            # if thread dies, it closes the connection?
-            self.thread = threading.Thread(
-                    target=self.recv,
-                    daemon=True
-                    )
-            self.thread.start()
+            else:
+                events.request_success.fire(
+                    request_type='ws-conn', name='connection',
+                    response_time=None,
+                    response_length=0)
+
+
+                # if server closes the connection, the thread dies, but
+                # if thread dies, it closes the connection?
+                self.thread = threading.Thread(
+                        target=self.recv,
+                        daemon=True
+                        )
+                self.thread.start()
         else:
-            self.log('{}| nothing to do: already connected'.format(
-                self.session_id))
+            self.log('nothing to do: already connected')
 
 
     def close(self):
         if self.ws is not None:
             self.ws.close()
         else:
-            self.log('{}| nothing to do: NOT connected'.format(
-                self.session_id))
+            self.log('nothing to do: NOT connected')
 
     def on_close(self):
         self.close()
@@ -144,7 +157,6 @@ class SocketClient(object):
 
     def webann_create_date(self, json_webann):
         weba = json.loads(json_webann)
-        #created = datetime.fromisoformat(weba['message']['created'])
         created = iso8601.parse_date(weba['message']['created'])
         return created
 
@@ -171,6 +183,7 @@ class SocketClient(object):
                 events.request_failure.fire(
                     request_type='ws-recv', name='receive',
                     response_time=None,
+                    response_length=0,
                     exception=websocket.WebSocketException(
                         'Unexpected binary frame'),
                     )
@@ -180,21 +193,17 @@ class SocketClient(object):
                 events.request_failure.fire(
                     request_type='ws-recv', name='receive',
                     response_time=None,
+                    response_length=0,
                     exception=websocket.WebSocketException(
                         'Invalid frame'),
                     )
 
             elif opcode == websocket.ABNF.OPCODE_CLOSE:
-                self.log(
-                        '{}| ####################### recv CLOSE'.format(
-                            self.session_id))
+                self.log('####################### recv CLOSE')
                 break  # terminate loop
 
             elif opcode == websocket.ABNF.OPCODE_PING:
                 # ignore ping-pong
-                self.log(
-                        '{}| *********************** ping'.format(
-                            self.session_id))
                 pass
 
             else:
@@ -202,13 +211,12 @@ class SocketClient(object):
                 events.request_failure.fire(
                     request_type='ws-recv', name='receive',
                     response_time=None,
+                    response_length=0,
                     exception=websocket.WebSocketException(
                         '{}| Unknown error for opcode({})'.format(
                             self.session_id, opcode)),
                     )
 
-            self.log('{}| *********************** recv ({}) ({})'.format(
-                self.session_id, opcode, data))
 
 
     def calc_response_length(self, response):
@@ -421,7 +429,6 @@ def hxat_lti_launch(locust):
             'Content-Type': 'application/x-www-form-urlencoded',
             }
     params = consumer.generate_launch_data()
-    locust.log('LTILTILTILTILTILTILTILTILTI PARAMS: {}'.format(params))
     response = locust.client.post(
             target_path, catch_response=True,
             name='/lti_launch/', headers=headers, data=params,
@@ -442,8 +449,19 @@ def hxat_lti_launch(locust):
             return True
 
 
-class WSBehavior(TaskSet):
-    wait_time = between(60, 300)
+def try_reconnect(locust):
+    if locust.ws_client.ws and locust.ws_client.ws.connected:
+        pass
+    else:
+        locust.ws_client.connect()
+        if locust.ws_client.ws and locust.ws_client.ws.connected:
+            locust.ws_client.log('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ws RECONNECTED')
+
+
+
+class WSBehavior15_90(TaskSet):
+    #wait_time = between(15, 90)
+    wait_time = between(90, 300)
     def on_start(self):
         # basic lti login for hxat text annotation
         ret = hxat_lti_launch(self.locust)
@@ -451,33 +469,18 @@ class WSBehavior(TaskSet):
             hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
             hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
             hxat_search(self.locust)
-            try:
-                self.locust.ws_client.connect()
-            except Exception as e:
-                raise
-            else:
-                if self.locust.ws_client is not None:
-                    if self.locust.ws_client.ws is not None:
-                        if self.locust.ws_client.ws.connected:
-                            pass
-                        else:
-                            raise Exception('unable to connect ws')
-                    else:
-                        raise Exception('unable to get ws object')
-                else:
-                    raise Exception('ws_client is None!'
+            self.locust.ws_client.connect()
         else:
             raise Exception('failed to lti login')
 
     def on_stop(self):
         if self.locust.ws_client is not None:
-            self.locust.ws_client.log(
-                    '========================================================= closing ws')
             self.locust.ws_client.close()
 
 
-    @task(1)
+    @task(2)
     def lurker1(self):
+        try_reconnect(self.locust)
         hxat_search(
                 locust=self.locust,
                 limit=randint(10, 50),
@@ -486,23 +489,89 @@ class WSBehavior(TaskSet):
 
     @task(10)
     def lurker2(self):
+        try_reconnect(self.locust)
         hxat_search(
                 locust=self.locust,
                 )
 
-    @task(1)
+    @task(3)
     def homework1(self):
+        try_reconnect(self.locust)
         hxat_create(self.locust)
         hxat_search(self.locust)
 
 
 
+class WSJustConnect(TaskSet):
+    #wait_time = between(15, 90)
+    wait_time = constant(15)
 
-class WSUser(HttpLocust):
-    task_set = WSBehavior
+    def on_start(self):
+        # basic lti login for hxat text annotation
+        ret = hxat_lti_launch(self.locust)
+        if ret:
+            hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.css')
+            hxat_get_static(self.locust, '/Hxighlighter/hxighlighter_text.js')
+            hxat_search(self.locust)
+            self.locust.ws_client.connect()
+        else:
+            raise Exception('failed to lti login')
+
+    def on_stop(self):
+        if self.locust.ws_client is not None:
+            self.locust.ws_client.close()
+
+
+    @task(1)
+    def lurker(self):
+        try_reconnect(self.locust)
+
+
+
+
+class WSUser15_90(HttpLocust):
+    weight = 1
+    task_set = WSBehavior15_90
 
     def __init__(self, *args, **kwargs):
-        super(WSUser, self).__init__(*args, **kwargs)
+        super(WSUser15_90, self).__init__(*args, **kwargs)
+
+        self.console = Console()
+        self.verbose = VERBOSE
+
+        self.console.write('VERBOSE IS {}'.format(VERBOSE))
+
+        self.cookies = dict()  # csrf, session after lti-login
+        self.store_token = make_jwt(
+                apikey=os.environ.get('STORE_CONSUMER', 'fake_consumer'),
+                secret=os.environ.get('STORE_SECRET', 'fake_secret'),
+                user=USER_ID
+                )
+        # remove protocol from url so we can do wss requests
+        (proto, hostname) = self.host.split('//')
+        url_path = '/ws/notification/{}--{}--{}'.format(
+                re.sub('[\W_]', '-', CONTEXT_ID),
+                re.sub('[\W_]', '-', COLLECTION_ID),
+                TARGET_SOURCE_ID
+                )
+        self.ws_client = SocketClient(hostname, app_url_path=url_path)
+
+        # check if self-signed certs
+        if 'hxtech.org' in hostname:
+            self.verify = os.environ.get('REQUESTS_CA_BUNDLE', False)
+        else:
+            self.verify = True
+
+    def log(self, msg):
+        if self.verbose:
+            self.console.write(msg)
+
+class WSUserJustConnect(HttpLocust):
+    weight = 3
+    task_set = WSJustConnect
+
+    def __init__(self, *args, **kwargs):
+        super(WSUserJustConnect, self).__init__(*args, **kwargs)
 
         self.console = Console()
         self.verbose = VERBOSE
