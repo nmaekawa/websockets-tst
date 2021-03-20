@@ -3,7 +3,7 @@
 click==7.0
 gevent==1.5a2
 iso8601==0.1.12
-jinja2==2.10.3
+jinja2==2.11.3
 locustio==0.13.5
 lti==0.9.4
 pyjwt==1.7.1
